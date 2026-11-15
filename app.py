@@ -160,10 +160,12 @@ required_course_columns = {
     "CourseType", "CourseLevel", "CoursePrice",
     "CourseDuration", "CourseRating"
 }
+
 required_course_history_columns = {
     "MonthStart", "CourseID", "CourseName", "CourseCategory",
     "EnrollmentCount", "CourseRevenue"
 }
+
 required_category_history_columns = {
     "MonthStart", "CourseCategory",
     "CategoryEnrollments", "CategoryRevenue"
@@ -197,6 +199,7 @@ last_course_month = course_history["MonthStart"].max()
 last_category_month = category_history["MonthStart"].max()
 last_observed_month = max(last_course_month, last_category_month)
 
+# Forecast starts one month after the latest month in the data.
 forecast_start = (
     last_observed_month.to_period("M").to_timestamp()
     + pd.offsets.MonthBegin(1)
@@ -222,26 +225,20 @@ forecast_months = pd.date_range(
 )
 
 forecast_end = forecast_months[-1]
+
 forecast_label = (
-    f"{forecast_start.strftime('%b %Y')} – "
-    f"{forecast_end.strftime('%b %Y')}"
+    f"Next {forecast_horizon} "
+    f"{'month' if forecast_horizon == 1 else 'months'}"
 )
 
 st.sidebar.info(
-    f"Historical data through: {last_observed_month.strftime('%B %Y')}\n\n"
-    f"Forecast period: {forecast_label}"
+    f"Latest available historical data: "
+    f"{last_observed_month.strftime('%B %Y')}\n\n"
+    f"Forecast horizon: {forecast_label}"
 )
 
 st.sidebar.caption("Powered by Machine Learning")
-st.sidebar.caption("EduPro © 2026")
-
-if last_observed_month < pd.Timestamp.today().to_period("M").to_timestamp():
-    st.warning(
-        f"Your latest historical data is {last_observed_month.strftime('%B %Y')}. "
-        "The forecast starts after that date, not after today's date. "
-        "Update the CSV history with newer actual data for forecasts "
-        "that begin in the current future period."
-    )
+st.sidebar.caption("EduPro | Predictive Analytics")
 
 
 # =========================================================
@@ -264,6 +261,7 @@ def generate_course_forecasts():
         enrollment_values = (
             history["EnrollmentCount"].astype(float).tail(3).tolist()
         )
+
         revenue_values = (
             history["CourseRevenue"].astype(float).tail(3).tolist()
         )
@@ -271,6 +269,7 @@ def generate_course_forecasts():
         for forecast_date in forecast_months:
             month = int(forecast_date.month)
             quarter = int(forecast_date.quarter)
+
             month_sin = np.sin(2 * np.pi * month / 12)
             month_cos = np.cos(2 * np.pi * month / 12)
 
@@ -321,6 +320,7 @@ def generate_course_forecasts():
                 "PredictedRevenue": predicted_revenue
             })
 
+            # Use this month's predictions as inputs for the next month.
             enrollment_values.append(predicted_enrollment)
             revenue_values.append(predicted_revenue)
 
@@ -359,6 +359,7 @@ def generate_category_forecasts(course_forecasts):
         revenue_values = (
             history["CategoryRevenue"].astype(float).tail(3).tolist()
         )
+
         enrollment_values = (
             history["CategoryEnrollments"].astype(float).tail(3).tolist()
         )
@@ -465,7 +466,6 @@ page = st.sidebar.radio(
 )
 
 
-
 # =========================================================
 # PAGE 1 - OVERVIEW
 # =========================================================
@@ -475,6 +475,7 @@ if page == "Overview":
         '<p class="main-title">EduPro Dashboard</p>',
         unsafe_allow_html=True
     )
+
     st.markdown(
         '<p class="subtitle">Monitor educational platform performance '
         'and explore future predictions.</p>',
@@ -487,6 +488,7 @@ if page == "Overview":
     total_categories = courses["CourseCategory"].nunique()
 
     col1, col2, col3, col4 = st.columns(4)
+
     col1.metric("Historical Enrollments", f"{total_enrollments:,}")
     col2.metric("Historical Revenue", f"₹{total_revenue:,.0f}")
     col3.metric("Total Courses", total_courses)
@@ -501,6 +503,7 @@ if page == "Overview":
         course_history.groupby("MonthStart")["EnrollmentCount"]
         .sum().reset_index()
     )
+
     monthly_revenue = (
         course_history.groupby("MonthStart")["CourseRevenue"]
         .sum().reset_index()
@@ -525,6 +528,7 @@ if page == "Overview":
         course_forecasts.groupby("MonthStart")
         ["PredictedEnrollment"].sum().reset_index()
     )
+
     monthly_revenue_forecast = (
         course_forecasts.groupby("MonthStart")
         ["PredictedRevenue"].sum().reset_index()
@@ -539,6 +543,7 @@ if page == "Overview":
     ].sum()
 
     col1, col2, col3 = st.columns(3)
+
     col1.metric("Forecast Enrollments", f"{annual_enrollment:,.0f}")
     col2.metric("Forecast Revenue", f"₹{total_forecast_revenue:,.0f}")
     col3.metric("Forecast Months", forecast_horizon)
@@ -635,6 +640,7 @@ elif page == "Course Enrollment":
     forecast = get_course_forecast(selected_course)
 
     col1, col2, col3 = st.columns(3)
+
     col1.metric("Course", course_data["CourseName"])
     col2.metric("Category", course_data["CourseCategory"])
     col3.metric("Course Rating", course_data["CourseRating"])
@@ -644,10 +650,12 @@ elif page == "Course Enrollment":
         average_predicted = forecast["PredictedEnrollment"].mean()
 
         col1, col2 = st.columns(2)
+
         col1.metric(
             "Total Forecast Enrollments",
             f"{total_predicted:,.0f}"
         )
+
         col2.metric(
             "Average Monthly Enrollments",
             f"{average_predicted:,.1f}"
@@ -661,6 +669,7 @@ elif page == "Course Enrollment":
 
         display = forecast.copy()
         display["Month"] = display["MonthStart"].apply(format_month)
+
         display["PredictedEnrollment"] = display[
             "PredictedEnrollment"
         ].round(2)
@@ -689,8 +698,7 @@ elif page == "Course Enrollment":
         )
 
 
-
-        # =========================================================
+# =========================================================
 # PAGE 3 - COURSE REVENUE
 # =========================================================
 
@@ -717,6 +725,7 @@ elif page == "Course Revenue":
     forecast = get_course_forecast(selected_course)
 
     col1, col2, col3 = st.columns(3)
+
     col1.metric("Course", course_data["CourseName"])
     col2.metric("Category", course_data["CourseCategory"])
     col3.metric("Course Price", f"₹{course_data['CoursePrice']:,.0f}")
@@ -726,8 +735,16 @@ elif page == "Course Revenue":
         average_predicted = forecast["PredictedRevenue"].mean()
 
         col1, col2 = st.columns(2)
-        col1.metric("Total Forecast Revenue", f"₹{total_predicted:,.2f}")
-        col2.metric("Average Monthly Revenue", f"₹{average_predicted:,.2f}")
+
+        col1.metric(
+            "Total Forecast Revenue",
+            f"₹{total_predicted:,.2f}"
+        )
+
+        col2.metric(
+            "Average Monthly Revenue",
+            f"₹{average_predicted:,.2f}"
+        )
 
         st.markdown("### Monthly Revenue Forecast")
 
@@ -737,6 +754,7 @@ elif page == "Course Revenue":
 
         display = forecast.copy()
         display["Month"] = display["MonthStart"].apply(format_month)
+
         display["PredictedRevenue"] = display[
             "PredictedRevenue"
         ].round(2)
@@ -795,6 +813,7 @@ elif page == "Category Revenue":
     historical_revenue = historical["CategoryRevenue"].sum()
 
     col1, col2, col3 = st.columns(3)
+
     col1.metric("Category", selected_category)
     col2.metric("Courses", category_courses["CourseID"].nunique())
     col3.metric("Historical Revenue", f"₹{historical_revenue:,.0f}")
@@ -804,6 +823,7 @@ elif page == "Category Revenue":
         total_enrollment = forecast["PredictedEnrollment"].sum()
 
         col1, col2 = st.columns(2)
+
         col1.metric("Forecast Revenue", f"₹{total_revenue:,.2f}")
         col2.metric("Forecast Enrollments", f"{total_enrollment:,.0f}")
 
@@ -821,9 +841,11 @@ elif page == "Category Revenue":
 
         display = forecast.copy()
         display["Month"] = display["MonthStart"].apply(format_month)
+
         display["PredictedRevenue"] = display[
             "PredictedRevenue"
         ].round(2)
+
         display["PredictedEnrollment"] = display[
             "PredictedEnrollment"
         ].round(2)
